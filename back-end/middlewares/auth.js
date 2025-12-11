@@ -1,32 +1,32 @@
 const jwt = require('jsonwebtoken');
+const logger = require('../config/logger');
 
 /**
  * MIDDLEWARE DE AUTENTICAÇÃO OBRIGATÓRIA
  * Verifica e valida tokens JWT em rotas protegidas
+ * Adiciona informações do usuário autenticado ao objeto req
  */
 const authMiddleware = (req, res, next) => {
   const startTime = Date.now();
   const clientIP = req.ip || req.connection.remoteAddress;
   
-  console.log(`🔒 [AUTH MIDDLEWARE] Iniciado - Rota: ${req.path} - IP: ${clientIP}`);
+  logger.debug(`🔒 Auth middleware iniciado - Rota: ${req.path}`);
 
   try {
-    // OBTER TOKEN DO HEADER
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
-      console.log('❌ [AUTH MIDDLEWARE] Token não fornecido');
+      logger.warn('❌ Token não fornecido');
       return res.status(401).json({
         success: false,
         error: 'Token de autenticação necessário'
       });
     }
 
-    // VALIDAR FORMATO DO TOKEN (Bearer <token>)
     const parts = authHeader.split(' ');
     
     if (parts.length !== 2) {
-      console.log('❌ [AUTH MIDDLEWARE] Formato de token inválido');
+      logger.warn('❌ Formato de token inválido');
       return res.status(401).json({
         success: false,
         error: 'Formato de token inválido. Use: Bearer <token>'
@@ -36,14 +36,13 @@ const authMiddleware = (req, res, next) => {
     const [scheme, token] = parts;
 
     if (!/^Bearer$/i.test(scheme)) {
-      console.log('❌ [AUTH MIDDLEWARE] Esquema de autenticação inválido');
+      logger.warn('❌ Esquema de autenticação inválido');
       return res.status(401).json({
         success: false,
         error: 'Formato de token inválido. Use: Bearer <token>'
       });
     }
 
-    // VERIFICAR TOKEN JWT
     jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] }, (error, decoded) => {
       const authTime = Date.now() - startTime;
       
@@ -52,12 +51,12 @@ const authMiddleware = (req, res, next) => {
         
         if (error.name === 'TokenExpiredError') {
           errorMessage = 'Token expirado';
-          console.log(`❌ [AUTH MIDDLEWARE] Token expirado - Tempo: ${authTime}ms`);
+          logger.warn(`❌ Token expirado - Tempo: ${authTime}ms`);
         } else if (error.name === 'JsonWebTokenError') {
           errorMessage = 'Token malformado';
-          console.log(`❌ [AUTH MIDDLEWARE] Token malformado - Tempo: ${authTime}ms`);
+          logger.warn(`❌ Token malformado - Tempo: ${authTime}ms`);
         } else {
-          console.log(`❌ [AUTH MIDDLEWARE] Erro de token: ${error.message} - Tempo: ${authTime}ms`);
+          logger.warn(`❌ Erro de token: ${error.message} - Tempo: ${authTime}ms`);
         }
         
         return res.status(401).json({
@@ -66,16 +65,14 @@ const authMiddleware = (req, res, next) => {
         });
       }
 
-      // VALIDAR PAYLOAD DO TOKEN
       if (!decoded.userId || !decoded.cpf) {
-        console.log(`❌ [AUTH MIDDLEWARE] Token com payload incompleto - Tempo: ${authTime}ms`);
+        logger.warn(`❌ Token com payload incompleto - Tempo: ${authTime}ms`);
         return res.status(401).json({
           success: false,
           error: 'Token com informações incompletas'
         });
       }
 
-      // ADICIONAR INFORMAÇÕES DO USUÁRIO À REQUISIÇÃO
       req.userId = decoded.userId;
       req.userCpf = decoded.cpf;
       req.user = {
@@ -84,15 +81,14 @@ const authMiddleware = (req, res, next) => {
         ativo: decoded.ativo
       };
       
-      // LOG DE ACESSO (AUDITORIA)
-      console.log(`✅ [AUTH MIDDLEWARE] Acesso autorizado - Usuário: ${decoded.nome} (${decoded.cpf}) - Rota: ${req.method} ${req.path} - Tempo: ${authTime}ms`);
+      logger.info(`✅ Acesso autorizado - Usuário: ${decoded.nome} - Rota: ${req.method} ${req.path} - Tempo: ${authTime}ms`);
       
       next();
     });
 
   } catch (error) {
     const authTime = Date.now() - startTime;
-    console.error('🔥 [AUTH MIDDLEWARE ERRO CRÍTICO]', {
+    logger.error('🔥 Erro crítico no auth middleware', {
       mensagem: error.message,
       stack: error.stack,
       tempo: `${authTime}ms`
@@ -109,6 +105,7 @@ const authMiddleware = (req, res, next) => {
  * MIDDLEWARE DE AUTENTICAÇÃO OPCIONAL
  * Verifica token se existir, mas não falha se não existir
  * Útil para rotas que funcionam tanto para usuários logados quanto não logados
+ * Exemplo: página que mostra conteúdo diferente para usuários logados
  */
 const optionalAuthMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -132,11 +129,12 @@ const optionalAuthMiddleware = (req, res, next) => {
               ativo: decoded.ativo
             };
             
-            console.log(`ℹ️ [OPTIONAL AUTH] Usuário autenticado: ${decoded.nome}`);
+            logger.debug(`ℹ️ Usuário autenticado (opcional): ${decoded.nome}`);
           }
         } catch (error) {
           // Token inválido, mas não falha pois é opcional
-          console.log(`⚠️ [OPTIONAL AUTH] Token inválido ignorado: ${error.message}`);
+          // Apenas logamos em nível debug
+          logger.debug(`⚠️ Token inválido ignorado (middleware opcional): ${error.message}`);
         }
       }
     }

@@ -1,5 +1,6 @@
 const { query, comparePasswords } = require('../config/database');
 const jwt = require('jsonwebtoken');
+const logger = require('../config/logger');
 
 /**
  * FORMATA CPF PARA O PADRÃO XXX.XXX.XXX-XX
@@ -42,29 +43,23 @@ const validarCPF = (cpf) => {
 };
 
 class AuthController {
-  /**
-   * REALIZA LOGIN DE USUÁRIO
-   * @param {Object} req - Request do Express
-   * @param {Object} res - Response do Express
-   */
   async login(req, res) {
     const startTime = Date.now();
     const clientIP = req.ip || req.connection.remoteAddress;
     
-    console.log(`🔍 [LOGIN INICIADO] IP: ${clientIP} - ${new Date().toISOString()}`);
-    
+    logger.info(`🔍 Login iniciado - IP: ${clientIP}`);
+
     try {
       const { cpfCnpj, password } = req.body;
       
-      console.log('📋 [LOGIN DADOS]', {
-        cpf: cpfCnpj ? cpfCnpj.replace(/\d(?=\d{4})/g, '*') : 'vazio', // Mascara parte do CPF
-        passwordPresent: !!password,
-        passwordLength: password ? password.length : 0
+      logger.debug('📋 Dados recebidos no login', {
+        cpf: cpfCnpj ? cpfCnpj.replace(/\d(?=\d{4})/g, '*') : 'vazio',
+        passwordPresent: !!password
       });
 
       // VALIDAÇÃO DOS DADOS DE ENTRADA
       if (!cpfCnpj || !password) {
-        console.log('❌ [LOGIN ERRO] Dados incompletos');
+        logger.warn('❌ Login com dados incompletos');
         return res.status(400).json({
           success: false,
           error: 'CPF e senha são obrigatórios'
@@ -75,7 +70,7 @@ class AuthController {
       const cpfNumeros = cpfCnpj.replace(/\D/g, '');
       
       if (!validarCPF(cpfNumeros)) {
-        console.log(`❌ [LOGIN ERRO] CPF inválido: ${cpfCnpj}`);
+        logger.warn(`❌ CPF inválido: ${cpfCnpj}`);
         return res.status(400).json({
           success: false,
           error: 'CPF inválido'
@@ -83,7 +78,7 @@ class AuthController {
       }
 
       const cpfFormatado = formatarCPF(cpfNumeros);
-      console.log(`🔍 [LOGIN BUSCA] Buscando usuário: ${cpfFormatado}`);
+      logger.debug(`🔍 Buscando usuário: ${cpfFormatado}`);
 
       // BUSCAR USUÁRIO NO BANCO DE DADOS
       const result = await query(`
@@ -99,10 +94,10 @@ class AuthController {
           OR REPLACE(REPLACE(REPLACE(UserID, '.', ''), '-', ''), '/', '') = @cpfNumeros
       `, { cpfFormatado, cpfNumeros });
 
-      console.log(`📊 [LOGIN RESULTADO] Usuários encontrados: ${result.recordset.length}`);
+      logger.debug(`📊 Usuários encontrados: ${result.recordset.length}`);
 
       if (result.recordset.length === 0) {
-        console.log(`❌ [LOGIN ERRO] Usuário não encontrado: ${cpfFormatado}`);
+        logger.warn(`❌ Usuário não encontrado: ${cpfFormatado}`);
         return res.status(401).json({
           success: false,
           error: 'Credenciais inválidas'
@@ -110,19 +105,15 @@ class AuthController {
       }
 
       const usuario = result.recordset[0];
-      console.log('👤 [LOGIN USUÁRIO]', {
+      logger.debug('👤 Usuário encontrado', {
         id: usuario.ID,
         nome: usuario.UserName,
-        status: usuario.IsActive,
-        ultimoLogin: usuario.LastLogin
+        status: usuario.IsActive
       });
 
       // VERIFICAR STATUS DO USUÁRIO
-      // Sistema legado: 'X' = ativo, '.' = inativo
-      console.log(`🔍 [LOGIN STATUS] Verificando status: ${usuario.IsActive}`);
-      
       if (usuario.IsActive === '.') {
-        console.log(`❌ [LOGIN ERRO] Usuário inativo: ${usuario.UserName}`);
+        logger.warn(`❌ Usuário inativo: ${usuario.UserName}`);
         return res.status(401).json({
           success: false,
           error: 'Usuário inativo. Entre em contato com o administrador.'
@@ -130,20 +121,20 @@ class AuthController {
       }
 
       if (usuario.IsActive !== 'X') {
-        console.log(`⚠️ [LOGIN ERRO] Status inválido: "${usuario.IsActive}"`);
+        logger.warn(`⚠️ Status inválido: "${usuario.IsActive}"`);
         return res.status(401).json({
           success: false,
           error: 'Status do usuário inválido. Entre em contato com o administrador.'
         });
       }
 
-      console.log('✅ [LOGIN STATUS] Usuário ativo');
+      logger.debug('✅ Status OK - Usuário ativo');
 
       // VERIFICAR SENHA
       const senhaBanco = usuario.Password ? usuario.Password.trim() : '';
       
       if (!senhaBanco) {
-        console.log(`❌ [LOGIN ERRO] Senha vazia no banco para usuário: ${usuario.ID}`);
+        logger.warn(`❌ Senha vazia no banco para usuário: ${usuario.ID}`);
         return res.status(401).json({
           success: false,
           error: 'Credenciais inválidas'
@@ -153,25 +144,24 @@ class AuthController {
       const senhaValida = comparePasswords(password, senhaBanco);
       
       if (!senhaValida) {
-        console.log(`❌ [LOGIN ERRO] Senha inválida para usuário: ${usuario.ID}`);
+        logger.warn(`❌ Senha inválida para usuário: ${usuario.ID}`);
         return res.status(401).json({
           success: false,
           error: 'Credenciais inválidas'
         });
       }
 
-      console.log('✅ [LOGIN SENHA] Senha validada com sucesso');
+      logger.debug('✅ Senha validada com sucesso');
 
-      // ATUALIZAR ÚLTIMO LOGIN (não bloqueante)
+      // ATUALIZAR ÚLTIMO LOGIN
       try {
         await query(
           `UPDATE LoginUsers SET LastLogin = GETDATE() WHERE ID = @id`,
           { id: usuario.ID }
         );
-        console.log(`📅 [LOGIN] Último login atualizado para usuário: ${usuario.ID}`);
+        logger.debug(`📅 Último login atualizado para usuário: ${usuario.ID}`);
       } catch (error) {
-        console.warn(`⚠️ [LOGIN AVISO] Não foi possível atualizar último login: ${error.message}`);
-        // Não falha o login se não conseguir atualizar
+        logger.warn(`⚠️ Não foi possível atualizar último login: ${error.message}`);
       }
 
       // GERAR TOKEN JWT
@@ -188,7 +178,7 @@ class AuthController {
         { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
       );
       
-      console.log(`🔑 [LOGIN TOKEN] Token gerado para: ${usuario.UserName}`);
+      logger.debug(`🔑 Token gerado para: ${usuario.UserName}`);
 
       // CALCULAR TEMPO DE EXECUÇÃO
       const executionTime = Date.now() - startTime;
@@ -210,13 +200,13 @@ class AuthController {
         performance: `${executionTime}ms`
       };
 
-      console.log(`✅ [LOGIN CONCLUÍDO] Sucesso em ${executionTime}ms para: ${usuario.UserName}`);
+      logger.info(`✅ Login realizado com sucesso para: ${usuario.UserName} - Tempo: ${executionTime}ms`);
       
       res.json(response);
 
     } catch (error) {
       const executionTime = Date.now() - startTime;
-      console.error('🔥 [LOGIN ERRO CRÍTICO]', {
+      logger.error('🔥 Erro crítico no login', {
         mensagem: error.message,
         stack: error.stack,
         ip: clientIP,
@@ -237,7 +227,7 @@ class AuthController {
    */
   async verificarToken(req, res) {
     try {
-      console.log(`🔒 [TOKEN VERIFY] Token verificado para: ${req.user.nome}`);
+      logger.info(`🔒 Token verificado para: ${req.user?.nome || 'usuário desconhecido'}`);
       
       res.json({
         success: true,
@@ -250,7 +240,7 @@ class AuthController {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('❌ [TOKEN ERRO]', error.message);
+      logger.error('❌ Erro ao verificar token:', error.message);
       res.status(500).json({
         success: false,
         error: error.message
@@ -261,9 +251,9 @@ class AuthController {
   /**
    * OBTÉM PERFIL COMPLETO DO USUÁRIO AUTENTICADO
    */
-  async getProfile(req, res) {
+    async getProfile(req, res) {
     try {
-      console.log(`👤 [PROFILE] Solicitado por: ${req.user.nome}`);
+      logger.info(`👤 Perfil solicitado por: ${req.user?.nome || 'usuário desconhecido'}`);
       
       const result = await query(`
         SELECT 
@@ -278,7 +268,7 @@ class AuthController {
       `, { userId: req.userId });
 
       if (result.recordset.length === 0) {
-        console.log(`❌ [PROFILE ERRO] Usuário não encontrado: ${req.userId}`);
+        logger.warn(`❌ Usuário não encontrado no banco: ${req.userId}`);
         return res.status(404).json({
           success: false,
           error: 'Usuário não encontrado'
@@ -287,7 +277,7 @@ class AuthController {
 
       const usuario = result.recordset[0];
       
-      console.log(`✅ [PROFILE] Dados retornados para: ${usuario.UserName}`);
+      logger.info(`✅ Dados do perfil retornados para: ${usuario.UserName}`);
 
       res.json({
         success: true,
@@ -303,7 +293,7 @@ class AuthController {
       });
 
     } catch (error) {
-      console.error('❌ [PROFILE ERRO]', error.message);
+      logger.error('❌ Erro ao obter perfil:', error.message);
       res.status(500).json({
         success: false,
         error: error.message
@@ -314,10 +304,11 @@ class AuthController {
   /**
    * REALIZA LOGOUT (APENAS SIMBÓLICO - TOKEN É STATELESS)
    * Em sistemas JWT, o logout é feito no frontend removendo o token
+   * Esta rota apenas registra a ação no servidor
    */
   async logout(req, res) {
     try {
-      console.log(`🚪 [LOGOUT] Usuário deslogado: ${req.user.nome}`);
+      logger.info(`🚪 Logout realizado por: ${req.user?.nome || 'usuário desconhecido'}`);
       
       res.json({
         success: true,
@@ -325,7 +316,7 @@ class AuthController {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('❌ [LOGOUT ERRO]', error.message);
+      logger.error('❌ Erro no logout:', error.message);
       res.status(500).json({
         success: false,
         error: error.message
@@ -335,13 +326,13 @@ class AuthController {
 
   /**
    * VERIFICA SAÚDE DA API E CONEXÃO COM BANCO
-   * Rota usada por sistemas de monitoramento
+   * Rota usada por sistemas de monitoramento (ex: Kubernetes, Docker Healthcheck)
    */
   async healthCheck(req, res) {
     try {
       const result = await query('SELECT 1 as teste, DB_NAME() as banco');
       
-      console.log('🏥 [HEALTH CHECK] Sistema saudável');
+      logger.debug('🏥 Health check realizado - Sistema saudável');
       
       res.json({
         success: true,
@@ -350,7 +341,82 @@ class AuthController {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('🚨 [HEALTH CHECK ERRO]', error.message);
+      logger.error('🚨 Erro no health check:', error.message);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+    /**
+   * DEBUG: VER ESTRUTURA DE TABELA
+   * ⚠️ APENAS PARA DESENVOLVIMENTO ⚠️
+   */
+  async debugTabela(req, res) {
+    try {
+      const { tabela } = req.params;
+      
+      logger.debug(`🔍 Debug tabela: ${tabela}`);
+
+      // 1. Buscar estrutura das colunas
+      const estrutura = await query(`
+        SELECT 
+          c.name AS Coluna,
+          t.name AS Tipo,
+          c.max_length AS Tamanho,
+          c.is_nullable AS PermiteNulo,
+          CASE 
+            WHEN ic.column_id IS NOT NULL THEN 'PK'
+            ELSE ''
+          END AS ChavePrimaria,
+          dc.definition AS ValorPadrao
+        FROM sys.columns c
+        JOIN sys.types t ON c.user_type_id = t.user_type_id
+        LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id 
+          AND c.column_id = ic.column_id
+          AND ic.index_id = 1 -- Índice clusterizado (PK)
+        LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
+        WHERE c.object_id = OBJECT_ID(@tabela)
+        ORDER BY c.column_id
+      `, { tabela });
+
+      // 2. Buscar algumas linhas de exemplo
+      const exemplo = await query(`
+        SELECT TOP 3 * 
+        FROM ${tabela}
+      `);
+
+      // 3. Buscar constraints e relações
+      const relacoes = await query(`
+        SELECT 
+          fk.name AS NomeFK,
+          tp.name AS TabelaPai,
+          cp.name AS ColunaPai,
+          tr.name AS TabelaReferencia,
+          cr.name AS ColunaReferencia
+        FROM sys.foreign_keys fk
+        JOIN sys.tables tp ON fk.parent_object_id = tp.object_id
+        JOIN sys.tables tr ON fk.referenced_object_id = tr.object_id
+        JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+        JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id 
+          AND fkc.parent_column_id = cp.column_id
+        JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id 
+          AND fkc.referenced_column_id = cr.column_id
+        WHERE tp.name = @tabela OR tr.name = @tabela
+      `, { tabela });
+
+      res.json({
+        success: true,
+        tabela: tabela,
+        estrutura: estrutura.recordset,
+        exemplo: exemplo.recordset,
+        relacoes: relacoes.recordset,
+        totalColunas: estrutura.recordset.length
+      });
+
+    } catch (error) {
+      logger.error('❌ Erro no debug tabela:', error.message);
       res.status(500).json({
         success: false,
         error: error.message
@@ -360,8 +426,8 @@ class AuthController {
 
   /**
    * BUSCA INFORMAÇÕES DE UM USUÁRIO POR CPF
-   * APENAS PARA DESENVOLVIMENTO E DEBUG
-   * @warning Não usar em produção sem autenticação adequada
+   * ⚠️ APENAS PARA DESENVOLVIMENTO E DEBUG ⚠️
+   * Não usar em produção sem autenticação adequada
    */
   async buscarUsuario(req, res) {
     try {
@@ -369,7 +435,7 @@ class AuthController {
       const cpfNumeros = cpf.replace(/\D/g, '');
       const cpfFormatado = formatarCPF(cpfNumeros);
 
-      console.log(`🔍 [BUSCA USUÁRIO] CPF solicitado: ${cpfFormatado}`);
+      logger.debug(`🔍 Busca de usuário solicitada - CPF: ${cpfFormatado}`);
 
       const result = await query(`
         SELECT 
@@ -385,7 +451,7 @@ class AuthController {
       if (result.recordset.length > 0) {
         const usuario = result.recordset[0];
         
-        console.log(`✅ [BUSCA USUÁRIO] Usuário encontrado: ${usuario.UserName}`);
+        logger.info(`✅ Usuário encontrado: ${usuario.UserName}`);
         
         res.json({
           success: true,
@@ -398,7 +464,7 @@ class AuthController {
           }
         });
       } else {
-        console.log(`ℹ️ [BUSCA USUÁRIO] Usuário não encontrado: ${cpfFormatado}`);
+        logger.info(`ℹ️ Usuário não encontrado: ${cpfFormatado}`);
         res.json({
           success: true,
           encontrado: false,
@@ -406,7 +472,7 @@ class AuthController {
         });
       }
     } catch (error) {
-      console.error('❌ [BUSCA USUÁRIO ERRO]', error.message);
+      logger.error('❌ Erro ao buscar usuário:', error.message);
       res.status(500).json({
         success: false,
         error: 'Erro interno do servidor'

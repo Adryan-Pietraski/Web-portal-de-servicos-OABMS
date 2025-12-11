@@ -1,4 +1,5 @@
 const sql = require('mssql');
+const logger = require('./logger');
 
 /**
  * CONFIGURAÇÃO DO BANCO DE DADOS SQL SERVER
@@ -39,28 +40,21 @@ let pool; // Pool de conexões (singleton)
 async function getConnection() {
   try {
     if (!pool) {
-      console.log(`🔌 [DATABASE] Conectando ao banco: ${dbConfig.database}...`);
+      logger.info(`🔌 Conectando ao banco: ${dbConfig.database}...`);
       pool = await sql.connect(dbConfig);
-      console.log(`✅ [DATABASE] Conectado com sucesso: ${dbConfig.database}`);
+      logger.info(`✅ Conectado ao banco: ${dbConfig.database}`);
     }
     return pool;
   } catch (error) {
-    console.error('❌ [DATABASE ERRO] Falha na conexão:', error.message);
-    throw error; // Propaga o erro para quem chamou
+    logger.error('❌ Erro ao conectar ao banco:', error.message);
+    throw error;
   }
 }
 
-/**
- * EXECUTA UMA QUERY SQL COM PARÂMETROS
- * @param {string} sqlQuery - Query SQL a ser executada
- * @param {Object} params - Parâmetros para prevenir SQL Injection
- * @returns {Promise<sql.IResult>} Resultado da query
- */
 async function query(sqlQuery, params = {}) {
   const connection = await getConnection();
   const request = connection.request();
   
-  // Adiciona parâmetros de forma segura (previne SQL Injection)
   Object.entries(params).forEach(([key, value]) => {
     request.input(key, value);
   });
@@ -69,9 +63,9 @@ async function query(sqlQuery, params = {}) {
     const result = await request.query(sqlQuery);
     return result;
   } catch (error) {
-    console.error('❌ [DATABASE ERRO] Falha na query:', {
+    logger.error('❌ Erro na query:', {
       mensagem: error.message,
-      query: sqlQuery.substring(0, 200), // Log apenas parte da query por segurança
+      query: sqlQuery.substring(0, 200),
       parametros: Object.keys(params)
     });
     throw error;
@@ -107,17 +101,17 @@ function crc32(str) {
  * @returns {boolean} true se as senhas coincidem
  */
 function comparePasswords(input, stored) {
-  console.log('🔐 [AUTH] Comparação de senhas iniciada');
+  logger.debug('🔐 Comparação de senhas iniciada');
   
   // Validações básicas
   if (!stored || !input) {
-    console.warn('⚠️ [AUTH] Senha vazia fornecida ou armazenada');
+    logger.warn('⚠️ Senha vazia fornecida ou armazenada');
     return false;
   }
   
   const storedTrimmed = stored.trim();
   if (storedTrimmed === '') {
-    console.warn('⚠️ [AUTH] Hash de senha vazio no banco');
+    logger.warn('⚠️ Hash de senha vazio no banco');
     return false;
   }
   
@@ -125,7 +119,7 @@ function comparePasswords(input, stored) {
   const inputCRC32 = crc32(input).toString(16).toUpperCase();
   const match = inputCRC32 === storedTrimmed;
   
-  console.log(`🔐 [AUTH] Resultado comparação: ${match ? '✅' : '❌'}`, {
+  logger.debug(`🔐 Resultado comparação: ${match ? '✅' : '❌'}`, {
     inputLength: input.length,
     storedLength: storedTrimmed.length,
     inputCRC32: inputCRC32,
@@ -144,17 +138,19 @@ async function closeConnection() {
   try {
     if (pool) {
       await pool.close();
-      console.log('🔒 [DATABASE] Conexão fechada com sucesso');
-      pool = null; // Limpa referência
+      logger.info('🔒 Conexão com o banco fechada');
+      pool = null;
     }
   } catch (error) {
-    console.error('❌ [DATABASE ERRO] Falha ao fechar conexão:', error.message);
+    logger.error('❌ Erro ao fechar conexão:', error.message);
   }
 }
+
 
 // Exporta funções públicas
 module.exports = { 
   query, 
   comparePasswords,
+  crc32,
   closeConnection 
 };

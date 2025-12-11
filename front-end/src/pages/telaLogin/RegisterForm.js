@@ -1,7 +1,7 @@
-// src/pages/telalogin/RegisterForm.js
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { LuEye, LuEyeClosed } from "react-icons/lu";
+import { FaUserPlus, FaArrowLeft } from "react-icons/fa"; // Adicionado FaArrowLeft
 import { colors, breakpoints } from './styles/GlobalStyles';
 
 // Container do formulário
@@ -30,13 +30,11 @@ const BackButton = styled.button`
   font-weight: 500;
   
   &:hover {
-    text-decoration: none;
     background: rgba(13, 35, 87, 0.05);
   }
 
   @media (max-width: ${breakpoints.mobile}) {
     font-size: 0.85rem;
-    margin-bottom: 1rem;
   }
 `;
 
@@ -47,7 +45,6 @@ const FormTitle = styled.h2`
   color: ${colors.darkBlue};
   margin-bottom: 0.5rem;
   text-align: center;
-  line-height: 1.3;
 
   @media (max-width: ${breakpoints.mobile}) {
     font-size: 1.3rem;
@@ -59,7 +56,6 @@ const FormSubtitle = styled.p`
   text-align: center;
   margin-bottom: 2rem;
   font-size: 0.9rem;
-  line-height: 1.5;
 
   @media (max-width: ${breakpoints.mobile}) {
     font-size: 0.85rem;
@@ -71,7 +67,6 @@ const FormSubtitle = styled.p`
 const InputGroup = styled.div`
   margin-bottom: 1rem;
   box-sizing: border-box;
-  position: relative;
 `;
 
 const Label = styled.label`
@@ -99,13 +94,7 @@ const Input = styled.input`
   &:focus {
     outline: none;
     border-color: ${colors.lightBlue};
-    box-shadow: 0 0 0 3px rgba(124, 176, 235, 0.15);
     background: white;
-  }
-  
-  &::placeholder {
-    color: #a0a0a0;
-    font-size: 0.9rem;
   }
 
   @media (max-width: ${breakpoints.mobile}) {
@@ -133,21 +122,18 @@ const TogglePasswordButton = styled.button`
   color: #666;
   cursor: pointer;
   padding: 0.2rem;
-  border-radius: 4px;
   width: 24px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
   
   &:hover {
     color: ${colors.darkBlue};
-    background: rgba(0, 0, 0, 0.05);
   }
 `;
 
-// Botão principal
+// Botão principal com ícone
 const PrimaryButton = styled.button`
   width: 100%;
   padding: 1rem;
@@ -161,16 +147,15 @@ const PrimaryButton = styled.button`
   transition: all 0.3s ease;
   margin-bottom: 1.5rem;
   margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   box-sizing: border-box;
   
   &:hover {
     background: #0a1a45;
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(13, 35, 87, 0.3);
-  }
-  
-  &:active {
-    transform: translateY(0);
   }
 
   @media (max-width: ${breakpoints.mobile}) {
@@ -179,29 +164,25 @@ const PrimaryButton = styled.button`
   }
 `;
 
-// Link de alternância entre login e cadastro
+// Link de alternância
 const ToggleLink = styled.div`
   text-align: center;
   color: #666;
   font-size: 0.9rem;
   margin-top: 1rem;
-  box-sizing: border-box;
   
   button {
     color: ${colors.darkBlue};
     background: none;
     border: none;
-    text-decoration: none;
     font-weight: 600;
     cursor: pointer;
     font-size: 0.9rem;
     padding: 0.2rem 0.4rem;
-    border-radius: 4px;
     transition: all 0.2s ease;
     
     &:hover {
       text-decoration: underline;
-      background: rgba(13, 35, 87, 0.05);
     }
   }
 
@@ -234,7 +215,8 @@ const RegisterForm = ({ onToggleForm, onSubmit }) => {
   return (
     <FormContainer>
       <BackButton type="button" onClick={onToggleForm}>
-        ← Voltar para o login
+        <FaArrowLeft />
+        Voltar para o login
       </BackButton>
       
       <FormTitle>Criar Nova Conta</FormTitle>
@@ -320,6 +302,7 @@ const RegisterForm = ({ onToggleForm, onSubmit }) => {
         </InputGroup>
         
         <PrimaryButton type="submit">
+          <FaUserPlus />
           Criar Conta
         </PrimaryButton>
       </form>

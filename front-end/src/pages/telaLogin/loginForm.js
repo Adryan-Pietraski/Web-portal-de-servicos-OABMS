@@ -1,8 +1,57 @@
-// src/pages/telalogin/LoginForm.js
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { LuEye, LuEyeClosed } from "react-icons/lu";
+import { FaArrowRight } from "react-icons/fa"; // Ícone de seta adicionado
 import { colors, breakpoints } from './styles/GlobalStyles';
+import { useAuth } from '../../contexts/AuthContext';
+
+// Mensagem de erro (simplificada)
+const ErrorMessage = styled.div`
+  background: #fee;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.2rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  &::before {
+    content: '⚠️';
+    font-size: 1rem;
+  }
+
+  @media (max-width: ${breakpoints.mobile}) {
+    font-size: 0.85rem;
+    padding: 0.7rem 0.9rem;
+  }
+`;
+
+// Mensagem de sucesso (simplificada)
+const SuccessMessage = styled.div`
+  background: #e8f7ef;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.2rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  &::before {
+    content: '✅';
+    font-size: 1rem;
+  }
+
+  @media (max-width: ${breakpoints.mobile}) {
+    font-size: 0.85rem;
+    padding: 0.7rem 0.9rem;
+  }
+`;
 
 // Container do formulário
 const FormContainer = styled.div`
@@ -10,7 +59,6 @@ const FormContainer = styled.div`
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  animation: fadeIn 0.6s ease-out;
 `;
 
 // Título do formulário
@@ -20,7 +68,6 @@ const FormTitle = styled.h2`
   color: ${colors.darkBlue};
   margin-bottom: 0.5rem;
   text-align: center;
-  line-height: 1.3;
 
   @media (max-width: ${breakpoints.mobile}) {
     font-size: 1.3rem;
@@ -32,7 +79,6 @@ const FormSubtitle = styled.p`
   text-align: center;
   margin-bottom: 2rem;
   font-size: 0.9rem;
-  line-height: 1.5;
 
   @media (max-width: ${breakpoints.mobile}) {
     font-size: 0.85rem;
@@ -44,7 +90,6 @@ const FormSubtitle = styled.p`
 const InputGroup = styled.div`
   margin-bottom: 1.2rem;
   box-sizing: border-box;
-  position: relative;
 `;
 
 const Label = styled.label`
@@ -59,10 +104,11 @@ const Label = styled.label`
   }
 `;
 
+// Input
 const Input = styled.input`
   width: 100%;
   padding: 0.9rem;
-  border: 2px solid #e8ecef;
+  border: 2px solid ${props => props.hasError ? '#f5c6cb' : '#e8ecef'};
   border-radius: 8px;
   font-size: 0.95rem;
   transition: all 0.3s ease;
@@ -71,14 +117,8 @@ const Input = styled.input`
   
   &:focus {
     outline: none;
-    border-color: ${colors.lightBlue};
-    box-shadow: 0 0 0 3px rgba(124, 176, 235, 0.15);
+    border-color: ${props => props.hasError ? '#e74c3c' : colors.lightBlue};
     background: white;
-  }
-  
-  &::placeholder {
-    color: #a0a0a0;
-    font-size: 0.9rem;
   }
 
   @media (max-width: ${breakpoints.mobile}) {
@@ -106,60 +146,54 @@ const TogglePasswordButton = styled.button`
   color: #666;
   cursor: pointer;
   padding: 0.2rem;
-  border-radius: 4px;
   width: 24px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
   
   &:hover {
     color: ${colors.darkBlue};
-    background: rgba(0, 0, 0, 0.05);
   }
 `;
 
-// Botão principal
+// Botão com ícone de seta
 const PrimaryButton = styled.button`
   width: 100%;
   padding: 1rem;
-  background: ${colors.darkBlue};
+  background: ${props => props.disabled ? '#cccccc' : colors.darkBlue};
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
-  cursor: pointer;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   transition: all 0.3s ease;
   margin-bottom: 1.5rem;
   margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   box-sizing: border-box;
   
-  &:hover {
+  &:hover:not(:disabled) {
     background: #0a1a45;
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(13, 35, 87, 0.3);
-  }
-  
-  &:active {
-    transform: translateY(0);
   }
 
   @media (max-width: ${breakpoints.mobile}) {
     padding: 0.9rem;
     font-size: 0.95rem;
-    margin-top: 0.5rem;
   }
 `;
 
-// Link de alternância entre login e cadastro
+// Link de alternância
 const ToggleLink = styled.div`
   text-align: center;
   color: #666;
   font-size: 0.9rem;
   margin-top: 1rem;
-  box-sizing: border-box;
   
   button {
     color: ${colors.darkBlue};
@@ -170,12 +204,10 @@ const ToggleLink = styled.div`
     cursor: pointer;
     font-size: 0.9rem;
     padding: 0.2rem 0.4rem;
-    border-radius: 4px;
     transition: all 0.2s ease;
     
     &:hover {
       text-decoration: underline;
-      background: rgba(13, 35, 87, 0.05);
     }
   }
 
@@ -189,21 +221,119 @@ const ToggleLink = styled.div`
 `;
 
 const LoginForm = ({ onToggleForm, onSubmit }) => {
+  const { login, loading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    cpfCnpj: '',
+    password: ''
+  });
+  const [localError, setLocalError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [id]: value
+    }));
+    
+    // Limpa erros quando usuário começa a digitar
+    if (localError) setLocalError('');
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(e);
+    
+    // Validação básica
+    if (!formData.cpfCnpj.trim() || !formData.password.trim()) {
+      setLocalError('Por favor, preencha todos os campos');
+      return;
+    }
+
+    // Limpa mensagens anteriores
+    setLocalError('');
+    setSuccessMessage('');
+
+    try {
+      // Chama a função de login do contexto
+      const result = await login(formData.cpfCnpj, formData.password);
+      
+      if (result.success) {
+        setSuccessMessage('Login realizado com sucesso!');
+        
+        // Se quiser fazer algo após login bem-sucedido
+        if (onSubmit) {
+          onSubmit(e);
+        }
+        
+        // Redireciona após 1 segundo
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
+        
+      } else {
+        setLocalError(result.error || 'Erro ao fazer login');
+      }
+      
+    } catch (err) {
+      setLocalError('Erro ao conectar com o servidor. Tente novamente.');
+    }
   };
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
 
+  // Função para formatar CPF enquanto digita
+  const formatCPF = (value) => {
+    const numbers = value.replace(/\D/g, '');
+    
+    if (numbers.length <= 11) {
+      // Formatação de CPF
+      if (numbers.length <= 3) return numbers;
+      if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
+      if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
+      return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`;
+    } else {
+      // Formatação de CNPJ
+      if (numbers.length <= 12) return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8, 12)}`;
+      return `${numbers.slice(0, 2)}.${numbers.slice(2, 5)}.${numbers.slice(5, 8)}/${numbers.slice(8, 12)}-${numbers.slice(12, 14)}`;
+    }
+  };
+
+  const handleCpfChange = (e) => {
+    const formattedValue = formatCPF(e.target.value);
+    setFormData(prev => ({
+      ...prev,
+      cpfCnpj: formattedValue
+    }));
+  };
+
   return (
     <FormContainer>
       <FormTitle>Acesso ao Sistema</FormTitle>
       <FormSubtitle>Entre com suas credenciais</FormSubtitle>
+      
+      {/* Mensagem de sucesso */}
+      {successMessage && (
+        <SuccessMessage>
+          {successMessage}
+        </SuccessMessage>
+      )}
+      
+      {/* Mensagem de erro do contexto */}
+      {error && !localError && (
+        <ErrorMessage>
+          {error}
+        </ErrorMessage>
+      )}
+      
+      {/* Mensagem de erro local */}
+      {localError && (
+        <ErrorMessage>
+          {localError}
+        </ErrorMessage>
+      )}
       
       <form onSubmit={handleSubmit}>
         <InputGroup>
@@ -212,7 +342,11 @@ const LoginForm = ({ onToggleForm, onSubmit }) => {
             type="text" 
             id="cpfCnpj"
             placeholder="Digite seu CPF ou CNPJ"
+            value={formData.cpfCnpj}
+            onChange={handleCpfChange}
+            hasError={!!localError}
             required
+            disabled={loading}
           />
         </InputGroup>
         
@@ -223,25 +357,42 @@ const LoginForm = ({ onToggleForm, onSubmit }) => {
               type={showPassword ? "text" : "password"}
               id="password"
               placeholder="Digite sua senha"
+              value={formData.password}
+              onChange={handleChange}
+              hasError={!!localError}
               required
+              disabled={loading}
             />
             <TogglePasswordButton 
               type="button" 
               onClick={togglePasswordVisibility}
               aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              disabled={loading}
             >
               {showPassword ? <LuEye size={18} /> : <LuEyeClosed size={18} />}
             </TogglePasswordButton>
           </PasswordContainer>
         </InputGroup>
         
-        <PrimaryButton type="submit">
-          Entrar →
+        <PrimaryButton type="submit" disabled={loading}>
+          {loading ? 'Autenticando...' : (
+            <>
+              Entrar
+              <FaArrowRight />
+            </>
+          )}
         </PrimaryButton>
       </form>
 
       <ToggleLink>
-        Não tem uma conta? <button type="button" onClick={onToggleForm}>Cadastre-se agora</button>
+        Não tem uma conta?{' '}
+        <button 
+          type="button" 
+          onClick={onToggleForm}
+          disabled={loading}
+        >
+          Cadastre-se agora
+        </button>
       </ToggleLink>
     </FormContainer>
   );
